@@ -15,7 +15,7 @@ import pydantic
 import typing_extensions
 
 from . import _utils, exceptions, mermaid
-from .nodes import BaseNode, DepsT, End, GraphRunContext, NodeDef, RunEndT
+from .nodes import BaseNode, DepsT, End, GraphRunContext, NodeDef, RunEndT, RunEndT_co
 from .state import EndStep, HistoryStep, NodeStep, StateT, deep_copy_state, nodes_schema_var
 
 __all__ = ('Graph',)
@@ -24,7 +24,7 @@ _logfire = logfire_api.Logfire(otel_scope='pydantic-graph')
 
 
 @dataclass(init=False)
-class Graph(Generic[StateT, DepsT, RunEndT]):
+class Graph(Generic[StateT, DepsT, RunEndT_co]):
     """Definition of a graph.
 
     In `pydantic-graph`, a graph is a collection of nodes that can be run in sequence. The nodes define
@@ -68,18 +68,18 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
     """
 
     name: str | None
-    node_defs: dict[str, NodeDef[StateT, DepsT, RunEndT]]
+    node_defs: dict[str, NodeDef[StateT, DepsT, RunEndT_co]]
     snapshot_state: Callable[[StateT], StateT]
     _state_type: type[StateT] | _utils.Unset = field(repr=False)
-    _run_end_type: type[RunEndT] | _utils.Unset = field(repr=False)
+    _run_end_type: type[RunEndT_co] | _utils.Unset = field(repr=False)
 
     def __init__(
         self,
         *,
-        nodes: Sequence[type[BaseNode[StateT, DepsT, RunEndT]]],
+        nodes: Sequence[type[BaseNode[StateT, DepsT, RunEndT_co]]],
         name: str | None = None,
         state_type: type[StateT] | _utils.Unset = _utils.UNSET,
-        run_end_type: type[RunEndT] | _utils.Unset = _utils.UNSET,
+        run_end_type: type[RunEndT_co] | _utils.Unset = _utils.UNSET,
         snapshot_state: Callable[[StateT], StateT] = deep_copy_state,
     ):
         """Create a graph from a sequence of nodes.
@@ -101,14 +101,14 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
         self.snapshot_state = snapshot_state
 
         parent_namespace = _utils.get_parent_namespace(inspect.currentframe())
-        self.node_defs: dict[str, NodeDef[StateT, DepsT, RunEndT]] = {}
+        self.node_defs: dict[str, NodeDef[StateT, DepsT, RunEndT_co]] = {}
         for node in nodes:
             self._register_node(node, parent_namespace)
 
         self._validate_edges()
 
     async def run(
-        self,
+        self: Graph[StateT, DepsT, RunEndT],
         start_node: BaseNode[StateT, DepsT, RunEndT],
         *,
         state: StateT = None,
@@ -174,7 +174,7 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
                         )
 
     def run_sync(
-        self,
+        self: Graph[StateT, DepsT, RunEndT],
         start_node: BaseNode[StateT, DepsT, RunEndT],
         *,
         state: StateT = None,
@@ -203,7 +203,7 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
         )
 
     async def next(
-        self,
+        self: Graph[StateT, DepsT, RunEndT],
         node: BaseNode[StateT, DepsT, RunEndT],
         history: list[HistoryStep[StateT, RunEndT]],
         *,
@@ -229,8 +229,8 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
         if node_id not in self.node_defs:
             raise exceptions.GraphRuntimeError(f'Node `{node}` is not in the graph.')
 
-        ctx = GraphRunContext(state, deps)
-        with _logfire.span('run node {node_id}', node_id=node_id, node=node):
+        with _logfire.span('run node {node_id}', node_id=node_id, node=node) as node_span:
+            ctx = GraphRunContext(state, deps, node_span)
             start_ts = _utils.now_utc()
             start = perf_counter()
             next_node = await node.run(ctx)
@@ -241,7 +241,9 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
         )
         return next_node
 
-    def dump_history(self, history: list[HistoryStep[StateT, RunEndT]], *, indent: int | None = None) -> bytes:
+    def dump_history(
+        self: Graph[StateT, DepsT, RunEndT], history: list[HistoryStep[StateT, RunEndT]], *, indent: int | None = None
+    ) -> bytes:
         """Dump the history of a graph run as JSON.
 
         Args:
@@ -253,7 +255,7 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
         """
         return self.history_type_adapter.dump_json(history, indent=indent)
 
-    def load_history(self, json_bytes: str | bytes | bytearray) -> list[HistoryStep[StateT, RunEndT]]:
+    def load_history(self, json_bytes: str | bytes | bytearray) -> list[HistoryStep[StateT, RunEndT_co]]:
         """Load the history of a graph run from JSON.
 
         Args:
@@ -265,7 +267,7 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
         return self.history_type_adapter.validate_json(json_bytes)
 
     @cached_property
-    def history_type_adapter(self) -> pydantic.TypeAdapter[list[HistoryStep[StateT, RunEndT]]]:
+    def history_type_adapter(self) -> pydantic.TypeAdapter[list[HistoryStep[StateT, RunEndT_co]]]:
         nodes = [node_def.node for node_def in self.node_defs.values()]
         state_t = self._get_state_type()
         end_t = self._get_run_end_type()
@@ -411,7 +413,7 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
         # state defaults to None, so use that if we can't infer it
         return type(None)  # pyright: ignore[reportReturnType]
 
-    def _get_run_end_type(self) -> type[RunEndT]:
+    def _get_run_end_type(self) -> type[RunEndT_co]:
         if _utils.is_set(self._run_end_type):
             return self._run_end_type
 
@@ -428,7 +430,9 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
         raise exceptions.GraphSetupError('Could not infer run end type from nodes, please set `run_end_type`.')
 
     def _register_node(
-        self, node: type[BaseNode[StateT, DepsT, RunEndT]], parent_namespace: dict[str, Any] | None
+        self: Graph[StateT, DepsT, RunEndT],
+        node: type[BaseNode[StateT, DepsT, RunEndT]],
+        parent_namespace: dict[str, Any] | None,
     ) -> None:
         node_id = node.get_id()
         if existing_node := self.node_defs.get(node_id):

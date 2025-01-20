@@ -1393,6 +1393,10 @@ def capture_run_messages() -> Iterator[list[_messages.ModelMessage]]:
             _messages_ctx_var.reset(token)
 
 
+def get_captured_run_messages() -> _RunMessages:
+    return _messages_ctx_var.get()
+
+
 @dataclasses.dataclass
 class _MarkFinalResult(Generic[ResultData]):
     """Marker class to indicate that the result is the final result.

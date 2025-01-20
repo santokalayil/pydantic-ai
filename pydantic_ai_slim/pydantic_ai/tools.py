@@ -158,6 +158,10 @@ class Tool(Generic[AgentDeps]):
     _var_positional_field: str | None = field(init=False)
     _validator: SchemaValidator = field(init=False, repr=False)
     _parameters_json_schema: ObjectJsonSchema = field(init=False)
+
+    # TODO: Move this state off the Tool class, which is otherwise stateless.
+    #   This should be tracked inside a specific agent run, not the tool.
+    #   In GraphAgent, we should consider adding tool retry tracking to the GraphState.
     current_retry: int = field(default=0, init=False)
 
     def __init__(
@@ -261,7 +265,7 @@ class Tool(Generic[AgentDeps]):
 
     async def run(
         self, message: _messages.ToolCallPart, run_context: RunContext[AgentDeps]
-    ) -> _messages.ModelRequestPart:
+    ) -> _messages.ToolReturnPart | _messages.RetryPromptPart:
         """Run the tool function asynchronously."""
         try:
             if isinstance(message.args, _messages.ArgsJson):

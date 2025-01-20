@@ -14,11 +14,13 @@ from . import _result, _utils, exceptions, messages as _messages, models
 from .tools import AgentDeps, RunContext
 from .usage import Usage, UsageLimits
 
-__all__ = 'ResultData', 'ResultValidatorFunc', 'RunResult', 'StreamedRunResult'
+__all__ = 'ResultData', 'ResultData_co', 'ResultValidatorFunc', 'RunResult', 'StreamedRunResult'
 
 
 ResultData = TypeVar('ResultData', default=str)
 """Type variable for the result data of a run."""
+ResultData_co = TypeVar('ResultData_co', default=str, covariant=True)
+"""Covariant type variable for the result data of a run."""
 
 ResultValidatorFunc = Union[
     Callable[[RunContext[AgentDeps], ResultData], ResultData],

@@ -11,7 +11,8 @@ from inline_snapshot import snapshot
 from pydantic import BaseModel, field_validator
 from pydantic_core import to_json
 
-from pydantic_ai import Agent, ModelRetry, RunContext, UnexpectedModelBehavior, UserError, capture_run_messages
+from pydantic_ai import ModelRetry, RunContext, UnexpectedModelBehavior, UserError, capture_run_messages
+from pydantic_ai.graph_agent import GraphAgent as Agent
 from pydantic_ai.messages import (
     ArgsDict,
     ArgsJson,
@@ -1233,7 +1234,7 @@ def test_heterogeneous_responses_non_streaming(set_event_loop: None) -> None:
 def test_last_run_messages() -> None:
     agent = Agent('test')
 
-    with pytest.raises(AttributeError, match='The `last_run_messages` attribute has been removed,'):
+    with pytest.raises(AttributeError, match='The `last_run_messages` attribute has been removed;'):
         agent.last_run_messages  # pyright: ignore[reportDeprecated]
 
 
