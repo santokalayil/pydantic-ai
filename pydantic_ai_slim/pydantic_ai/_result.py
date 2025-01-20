@@ -8,11 +8,11 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Generic, Literal, Union, cast, get_args, get_origin
 
 from pydantic import TypeAdapter, ValidationError
-from typing_extensions import Self, TypeAliasType, TypedDict
+from typing_extensions import TypeAliasType, TypedDict
 
 from . import _utils, messages as _messages
 from .exceptions import ModelRetry
-from .result import ResultData, ResultValidatorFunc
+from .result import ResultData, ResultData_co, ResultValidatorFunc
 from .tools import AgentDeps, RunContext, ToolDefinition
 
 
@@ -74,17 +74,19 @@ class ToolRetryError(Exception):
 
 
 @dataclass
-class ResultSchema(Generic[ResultData]):
+class ResultSchema(Generic[ResultData_co]):
     """Model the final response from an agent run.
 
     Similar to `Tool` but for the final result of running an agent.
     """
 
-    tools: dict[str, ResultTool[ResultData]]
+    tools: dict[str, ResultTool[ResultData_co]]
     allow_text_result: bool
 
     @classmethod
-    def build(cls, response_type: type[ResultData], name: str, description: str | None) -> Self | None:
+    def build(
+        cls: type[ResultSchema[ResultData]], response_type: type[ResultData], name: str, description: str | None
+    ) -> ResultSchema[ResultData] | None:
         """Build a ResultSchema dataclass from a response type."""
         if response_type is str:
             return None
@@ -112,7 +114,7 @@ class ResultSchema(Generic[ResultData]):
 
     def find_named_tool(
         self, parts: Iterable[_messages.ModelResponsePart], tool_name: str
-    ) -> tuple[_messages.ToolCallPart, ResultTool[ResultData]] | None:
+    ) -> tuple[_messages.ToolCallPart, ResultTool[ResultData_co]] | None:
         """Find a tool that matches one of the calls, with a specific name."""
         for part in parts:
             if isinstance(part, _messages.ToolCallPart):
@@ -122,7 +124,7 @@ class ResultSchema(Generic[ResultData]):
     def find_tool(
         self,
         parts: Iterable[_messages.ModelResponsePart],
-    ) -> tuple[_messages.ToolCallPart, ResultTool[ResultData]] | None:
+    ) -> tuple[_messages.ToolCallPart, ResultTool[ResultData_co]] | None:
         """Find a tool that matches one of the calls."""
         for part in parts:
             if isinstance(part, _messages.ToolCallPart):
@@ -142,11 +144,11 @@ DEFAULT_DESCRIPTION = 'The final response which ends this conversation'
 
 
 @dataclass(init=False)
-class ResultTool(Generic[ResultData]):
+class ResultTool(Generic[ResultData_co]):
     tool_def: ToolDefinition
     type_adapter: TypeAdapter[Any]
 
-    def __init__(self, response_type: type[ResultData], name: str, description: str | None, multiple: bool):
+    def __init__(self, response_type: type[ResultData_co], name: str, description: str | None, multiple: bool):
         """Build a ResultTool dataclass from a response type."""
         assert response_type is not str, 'ResultTool does not support str as a response type'
 
@@ -183,7 +185,7 @@ class ResultTool(Generic[ResultData]):
 
     def validate(
         self, tool_call: _messages.ToolCallPart, allow_partial: bool = False, wrap_validation_errors: bool = True
-    ) -> ResultData:
+    ) -> ResultData_co:
         """Validate a result message.
 
         Args:

@@ -564,6 +564,13 @@ class Agent(Generic[AgentDeps, ResultData]):
                                         messages.append(_messages.ModelRequest(parts))
                                     run_span.set_attribute('all_messages', messages)
 
+                                # The following is not guaranteed to be true, but we consider it a user error if
+                                # there are result validators that might convert the result data from an overridden
+                                # `result_type` to a type that is not valid as such.
+                                result_validators = cast(
+                                    list[_result.ResultValidator[AgentDeps, RunResultData]], self._result_validators
+                                )
+
                                 yield result.StreamedRunResult(
                                     messages,
                                     new_message_index,
@@ -571,7 +578,7 @@ class Agent(Generic[AgentDeps, ResultData]):
                                     result_stream,
                                     result_schema,
                                     run_context,
-                                    self._result_validators,
+                                    result_validators,
                                     result_tool_name,
                                     on_complete,
                                 )
