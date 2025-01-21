@@ -22,7 +22,7 @@ from . import (
     result,
     usage as _usage,
 )
-from .result import ResultData_co as ResultData
+from .result import ResultData_co
 from .settings import ModelSettings, merge_model_settings
 from .tools import (
     AgentDeps,
@@ -65,11 +65,11 @@ RunResultData = TypeVar('RunResultData')
 
 @final
 @dataclasses.dataclass(init=False)
-class Agent(Generic[AgentDeps, ResultData]):  # TODO: Make ResultData covariant, and AgentDeps contravariant
+class Agent(Generic[AgentDeps, ResultData_co]):
     """Class for defining "agents" - a way to have a specific type of "conversation" with an LLM.
 
     Agents are generic in the dependency type they take [`AgentDeps`][pydantic_ai.tools.AgentDeps]
-    and the result data type they return, [`ResultData`][pydantic_ai.result.ResultData].
+    and the result data type they return, [`ResultData_co`][pydantic_ai.result.ResultData_co].
 
     By default, if neither generic parameter is customised, agents have type `Agent[None, str]`.
 
@@ -105,8 +105,8 @@ class Agent(Generic[AgentDeps, ResultData]):  # TODO: Make ResultData covariant,
     """
     _result_tool_name: str = dataclasses.field(repr=False)
     _result_tool_description: str | None = dataclasses.field(repr=False)
-    _result_schema: _result.ResultSchema[ResultData] | None = dataclasses.field(repr=False)
-    _result_validators: list[_result.ResultValidator[AgentDeps, ResultData]] = dataclasses.field(repr=False)
+    _result_schema: _result.ResultSchema[ResultData_co] | None = dataclasses.field(repr=False)
+    _result_validators: list[_result.ResultValidator[AgentDeps, ResultData_co]] = dataclasses.field(repr=False)
     _system_prompts: tuple[str, ...] = dataclasses.field(repr=False)
     _function_tools: dict[str, Tool[AgentDeps]] = dataclasses.field(repr=False)
     _default_retries: int = dataclasses.field(repr=False)
@@ -123,7 +123,7 @@ class Agent(Generic[AgentDeps, ResultData]):  # TODO: Make ResultData covariant,
         self,
         model: models.Model | models.KnownModelName | None = None,
         *,
-        result_type: type[ResultData] = str,
+        result_type: type[ResultData_co] = str,
         system_prompt: str | Sequence[str] = (),
         deps_type: type[AgentDeps] = NoneType,
         name: str | None = None,
@@ -206,7 +206,7 @@ class Agent(Generic[AgentDeps, ResultData]):  # TODO: Make ResultData covariant,
         usage_limits: _usage.UsageLimits | None = None,
         usage: _usage.Usage | None = None,
         infer_name: bool = True,
-    ) -> result.RunResult[ResultData]: ...
+    ) -> result.RunResult[ResultData_co]: ...
 
     @overload
     async def run(
@@ -344,7 +344,7 @@ class Agent(Generic[AgentDeps, ResultData]):  # TODO: Make ResultData covariant,
         usage_limits: _usage.UsageLimits | None = None,
         usage: _usage.Usage | None = None,
         infer_name: bool = True,
-    ) -> result.RunResult[ResultData]: ...
+    ) -> result.RunResult[ResultData_co]: ...
 
     @overload
     def run_sync(
@@ -434,7 +434,7 @@ class Agent(Generic[AgentDeps, ResultData]):  # TODO: Make ResultData covariant,
         usage_limits: _usage.UsageLimits | None = None,
         usage: _usage.Usage | None = None,
         infer_name: bool = True,
-    ) -> AbstractAsyncContextManager[result.StreamedRunResult[AgentDeps, ResultData]]: ...
+    ) -> AbstractAsyncContextManager[result.StreamedRunResult[AgentDeps, ResultData_co]]: ...
 
     @overload
     def run_stream(
@@ -720,25 +720,27 @@ class Agent(Generic[AgentDeps, ResultData]):  # TODO: Make ResultData covariant,
 
     @overload
     def result_validator(
-        self, func: Callable[[RunContext[AgentDeps], ResultData], ResultData], /
-    ) -> Callable[[RunContext[AgentDeps], ResultData], ResultData]: ...
+        self, func: Callable[[RunContext[AgentDeps], ResultData_co], ResultData_co], /
+    ) -> Callable[[RunContext[AgentDeps], ResultData_co], ResultData_co]: ...
 
     @overload
     def result_validator(
-        self, func: Callable[[RunContext[AgentDeps], ResultData], Awaitable[ResultData]], /
-    ) -> Callable[[RunContext[AgentDeps], ResultData], Awaitable[ResultData]]: ...
-
-    @overload
-    def result_validator(self, func: Callable[[ResultData], ResultData], /) -> Callable[[ResultData], ResultData]: ...
+        self, func: Callable[[RunContext[AgentDeps], ResultData_co], Awaitable[ResultData_co]], /
+    ) -> Callable[[RunContext[AgentDeps], ResultData_co], Awaitable[ResultData_co]]: ...
 
     @overload
     def result_validator(
-        self, func: Callable[[ResultData], Awaitable[ResultData]], /
-    ) -> Callable[[ResultData], Awaitable[ResultData]]: ...
+        self, func: Callable[[ResultData_co], ResultData_co], /
+    ) -> Callable[[ResultData_co], ResultData_co]: ...
+
+    @overload
+    def result_validator(
+        self, func: Callable[[ResultData_co], Awaitable[ResultData_co]], /
+    ) -> Callable[[ResultData_co], Awaitable[ResultData_co]]: ...
 
     def result_validator(
-        self, func: _result.ResultValidatorFunc[AgentDeps, ResultData], /
-    ) -> _result.ResultValidatorFunc[AgentDeps, ResultData]:
+        self, func: _result.ResultValidatorFunc[AgentDeps, ResultData_co], /
+    ) -> _result.ResultValidatorFunc[AgentDeps, ResultData_co]:
         """Decorator to register a result validator function.
 
         Optionally takes [`RunContext`][pydantic_ai.tools.RunContext] as its first argument.
@@ -1273,7 +1275,7 @@ class Agent(Generic[AgentDeps, ResultData]):  # TODO: Make ResultData covariant,
         tool_call: _messages.ToolCallPart | None,
     ) -> RunResultData:
         if self._result_validators:
-            agent_result_data = cast(ResultData, result_data)
+            agent_result_data = cast(ResultData_co, result_data)
             for validator in self._result_validators:
                 agent_result_data = await validator.validate(agent_result_data, tool_call, run_context)
             return cast(RunResultData, agent_result_data)
@@ -1402,15 +1404,15 @@ def capture_run_messages() -> Iterator[list[_messages.ModelMessage]]:
 
 
 @dataclasses.dataclass
-class _MarkFinalResult(Generic[ResultData]):
+class _MarkFinalResult(Generic[ResultData_co]):
     """Marker class to indicate that the result is the final result.
 
-    This allows us to use `isinstance`, which wouldn't be possible if we were returning `ResultData` directly.
+    This allows us to use `isinstance`, which wouldn't be possible if we were returning `ResultData_co` directly.
 
     It also avoids problems in the case where the result type is itself `None`, but is set.
     """
 
-    data: ResultData
+    data: ResultData_co
     """The final result data."""
     tool_name: str | None
     """Name of the final result tool, None if the result is a string."""
