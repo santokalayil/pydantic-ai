@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 __all__ = (
     'AgentDeps',
+    'AgentDeps_inv',
     'DocstringFormat',
     'RunContext',
     'SystemPromptFunc',
@@ -31,7 +32,10 @@ __all__ = (
     'ToolDefinition',
 )
 
-AgentDeps = TypeVar('AgentDeps', default=None)
+AgentDeps_inv = TypeVar('AgentDeps_inv', default=None)
+"""Invariant type variable for agent dependencies."""
+
+AgentDeps = TypeVar('AgentDeps', default=None, contravariant=True)
 """Type variable for agent dependencies."""
 
 

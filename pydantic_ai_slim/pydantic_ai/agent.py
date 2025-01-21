@@ -22,10 +22,11 @@ from . import (
     result,
     usage as _usage,
 )
-from .result import ResultData
+from .result import ResultData_co as ResultData
 from .settings import ModelSettings, merge_model_settings
 from .tools import (
     AgentDeps,
+    AgentDeps_inv,
     DocstringFormat,
     RunContext,
     Tool,
@@ -64,7 +65,7 @@ RunResultData = TypeVar('RunResultData')
 
 @final
 @dataclasses.dataclass(init=False)
-class Agent(Generic[AgentDeps, ResultData]):
+class Agent(Generic[AgentDeps, ResultData]):  # TODO: Make ResultData covariant, and AgentDeps contravariant
     """Class for defining "agents" - a way to have a specific type of "conversation" with an LLM.
 
     Agents are generic in the dependency type they take [`AgentDeps`][pydantic_ai.tools.AgentDeps]
@@ -705,7 +706,7 @@ class Agent(Generic[AgentDeps, ResultData]):
             def decorator(
                 func_: _system_prompt.SystemPromptFunc[AgentDeps],
             ) -> _system_prompt.SystemPromptFunc[AgentDeps]:
-                runner = _system_prompt.SystemPromptRunner(func_, dynamic=dynamic)
+                runner = _system_prompt.SystemPromptRunner[AgentDeps](func_, dynamic=dynamic)
                 self._system_prompt_functions.append(runner)
                 if dynamic:
                     self._system_prompt_dynamic_functions[func_.__qualname__] = runner
@@ -940,7 +941,7 @@ class Agent(Generic[AgentDeps, ResultData]):
     ) -> None:
         """Private utility to register a function as a tool."""
         retries_ = retries if retries is not None else self._default_retries
-        tool = Tool(
+        tool = Tool[AgentDeps](
             func,
             takes_ctx=takes_ctx,
             max_retries=retries_,
@@ -1313,7 +1314,7 @@ class Agent(Generic[AgentDeps, ResultData]):
             msg = 'No tools available.'
         return _messages.RetryPromptPart(content=f'Unknown tool name: {tool_name!r}. {msg}')
 
-    def _get_deps(self, deps: AgentDeps) -> AgentDeps:
+    def _get_deps(self: Agent[AgentDeps_inv, Any], deps: AgentDeps_inv) -> AgentDeps_inv:
         """Get deps for a run.
 
         If we've overridden deps via `_override_deps`, use that, otherwise use the deps passed to the call.
